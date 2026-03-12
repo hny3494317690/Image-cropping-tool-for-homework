@@ -129,19 +129,6 @@ const isHeic = (file) => {
   );
 };
 
-const normalizeHeicResult = (result) => {
-  const value = Array.isArray(result) ? result[0] : result;
-  if (!value) return null;
-  if (value instanceof Blob) return value;
-  if (value instanceof ArrayBuffer) {
-    return new Blob([value], { type: "image/jpeg" });
-  }
-  if (ArrayBuffer.isView(value)) {
-    return new Blob([value.buffer], { type: "image/jpeg" });
-  }
-  return null;
-};
-
 const toJpegBlob = (canvas, quality = 0.92) =>
   new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
@@ -198,6 +185,65 @@ const decodeHeicWithBrowser = async (file) => {
   return null;
 };
 
+let libheifModulePromise = null;
+
+const getLibheifModule = async () => {
+  const factory = globalThis.libheif;
+  if (typeof factory !== "function") {
+    throw new Error("ERR_HEIC_LIB_MISSING");
+  }
+  if (!libheifModulePromise) {
+    const result = factory();
+    libheifModulePromise = result?.then ? result : Promise.resolve(result);
+  }
+  return libheifModulePromise;
+};
+
+const decodeHeicWithLibheif = async (file) => {
+  const libheif = await getLibheifModule();
+  if (!libheif?.HeifDecoder) {
+    throw new Error("ERR_HEIC_LIB_MISSING");
+  }
+
+  const buffer = await file.arrayBuffer();
+  const decoder = new libheif.HeifDecoder();
+  const images = decoder.decode(buffer);
+
+  if (!images || images.length === 0) {
+    throw new Error("ERR_LIBHEIF format not supported");
+  }
+
+  const image = images[0];
+  const width = image.get_width();
+  const height = image.get_height();
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.createImageData(width, height);
+
+  await new Promise((resolve, reject) => {
+    image.display(imageData, (displayData) => {
+      if (!displayData) {
+        reject(new Error("ERR_LIBHEIF decode failed"));
+        return;
+      }
+      resolve();
+    });
+  });
+
+  ctx.putImageData(imageData, 0, 0);
+
+  if (typeof image.free === "function") {
+    image.free();
+  }
+  if (typeof decoder.free === "function") {
+    decoder.free();
+  }
+
+  return toJpegBlob(canvas, 0.95);
+};
+
 const explainHeicError = (error) => {
   const message =
     typeof error === "string"
@@ -218,6 +264,9 @@ const explainHeicError = (error) => {
   }
   if (message.includes("ERR_LIBHEIF")) {
     return "HEIC 解码失败，可能是该文件损坏或格式不兼容。";
+  }
+  if (message.includes("ERR_HEIC_LIB_MISSING")) {
+    return "HEIC 解码库未加载，请检查 libheif 依赖文件。";
   }
 
   return `HEIC 转换失败：${message}`;
@@ -269,25 +318,16 @@ const handleFile = async (file) => {
   let blob = file;
   if (isHeic(file)) {
     try {
-      const nativeBlob = await decodeHeicWithBrowser(file);
-      if (nativeBlob) {
-        blob = nativeBlob;
+      const libheifBlob = await decodeHeicWithLibheif(file);
+      if (libheifBlob) {
+        blob = libheifBlob;
       } else {
-        if (typeof heic2any !== "function") {
-          fileInfo.textContent = "HEIC 转换库未加载，请检查依赖文件。";
-          return;
+        const nativeBlob = await decodeHeicWithBrowser(file);
+        if (nativeBlob) {
+          blob = nativeBlob;
+        } else {
+          throw new Error("ERR_HEIC_LIB_MISSING");
         }
-        const result = await heic2any({
-          blob: file,
-          toType: "image/jpeg",
-          quality: 0.9,
-        });
-        const normalized = normalizeHeicResult(result);
-        if (!normalized) {
-          fileInfo.textContent = "HEIC 转换结果异常，请更换浏览器再试。";
-          return;
-        }
-        blob = normalized;
       }
     } catch (error) {
       fileInfo.textContent = explainHeicError(error);
