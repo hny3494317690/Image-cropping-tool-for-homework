@@ -16,6 +16,10 @@
   --button-text: #111827;
   --primary-bg: #2563eb;
   --primary-text: #ffffff;
+  --success-bg: #16a34a;
+  --success-text: #ffffff;
+  --danger-bg: #ef4444;
+  --danger-text: #ffffff;
 }
 
 body.dark {
@@ -35,6 +39,10 @@ body.dark {
   --button-text: #e5e7eb;
   --primary-bg: #3b82f6;
   --primary-text: #ffffff;
+  --success-bg: #22c55e;
+  --success-text: #0b1220;
+  --danger-bg: #f87171;
+  --danger-text: #0b1220;
 }
 
 * {
@@ -99,6 +107,11 @@ body {
   color: var(--input-text);
   border-radius: 8px;
   cursor: pointer;
+}
+
+.file-input.success {
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .file-input input {
@@ -249,6 +262,16 @@ body.is-mobile .preview-area .button {
 .button.primary {
   background: var(--primary-bg);
   color: var(--primary-text);
+}
+
+.button.danger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.button.danger {
+  background: #ef4444;
+  color: #ffffff;
 }
 
 .button.ghost {
