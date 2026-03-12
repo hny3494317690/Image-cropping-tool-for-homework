@@ -13,6 +13,21 @@ const MAX_SIZE = 300 * 1024;
 const themeToggle = document.getElementById("themeToggle");
 const THEME_KEY = "theme";
 
+const isMobileBrowser = () => {
+  const ua = navigator.userAgent || "";
+  const byUa = /Mobi|Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+  const byTouch = navigator.maxTouchPoints > 1 && window.innerWidth < 900;
+  return byUa || byTouch;
+};
+
+const applyMobileClass = () => {
+  document.body.classList.toggle("is-mobile", isMobileBrowser());
+};
+
+applyMobileClass();
+window.addEventListener("resize", applyMobileClass);
+window.addEventListener("orientationchange", applyMobileClass);
+
 const getPreferredTheme = () => {
   if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
     return "dark";
