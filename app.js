@@ -6,8 +6,52 @@ const cropBtn = document.getElementById("cropBtn");
 const resetBtn = document.getElementById("resetBtn");
 const fileInfo = document.getElementById("fileInfo");
 const outputInfo = document.getElementById("outputInfo");
+const dropZone = document.getElementById("dropZone");
 
-const MAX_SIZE = 200 * 1024;
+const MAX_SIZE = 300 * 1024;
+
+const themeToggle = document.getElementById("themeToggle");
+const THEME_KEY = "theme";
+
+const getPreferredTheme = () => {
+  if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+};
+
+const applyTheme = (theme) => {
+  document.body.classList.toggle("dark", theme === "dark");
+  if (themeToggle) {
+    themeToggle.textContent = theme === "dark" ? "浅色模式" : "深色模式";
+    themeToggle.setAttribute("aria-pressed", theme === "dark");
+  }
+};
+
+const initTheme = () => {
+  const saved = localStorage.getItem(THEME_KEY);
+  applyTheme(saved || getPreferredTheme());
+};
+
+initTheme();
+
+if (themeToggle) {
+  themeToggle.addEventListener("click", () => {
+    const isDark = document.body.classList.contains("dark");
+    const next = isDark ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
+}
+
+const themeMedia = window.matchMedia?.("(prefers-color-scheme: dark)");
+if (themeMedia?.addEventListener) {
+  themeMedia.addEventListener("change", (event) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+      applyTheme(event.matches ? "dark" : "light");
+    }
+  });
+}
 
 let cropper = null;
 let sourceUrl = null;
@@ -48,6 +92,7 @@ const destroyCropper = () => {
 const loadImageToCropper = (url) => {
   sourceImage.onload = () => {
     destroyCropper();
+    setDropZoneState(true);
     cropper = new Cropper(sourceImage, {
       viewMode: 1,
       autoCropArea: 0.8,
@@ -84,14 +129,9 @@ const normalizeHeicResult = (result) => {
   return null;
 };
 
-const toBlob = (canvas) =>
+const toJpegBlob = (canvas, quality = 0.92) =>
   new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), "image/png");
-  });
-
-const toJpegBlob = (canvas) =>
-  new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.95);
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
   });
 
 const readFileAsDataUrl = (file) =>
@@ -110,6 +150,11 @@ const loadImageFromUrl = (url) =>
     img.src = url;
   });
 
+const setDropZoneState = (hasImage) => {
+  if (!dropZone) return;
+  dropZone.classList.toggle("has-image", hasImage);
+};
+
 const decodeHeicWithBrowser = async (file) => {
   if (typeof createImageBitmap === "function") {
     try {
@@ -120,7 +165,7 @@ const decodeHeicWithBrowser = async (file) => {
       const ctx = canvas.getContext("2d");
       ctx.drawImage(bitmap, 0, 0);
       bitmap.close();
-      const blob = await toJpegBlob(canvas);
+      const blob = await toJpegBlob(canvas, 0.95);
       if (blob) return blob;
     } catch (_) {}
   }
@@ -133,7 +178,7 @@ const decodeHeicWithBrowser = async (file) => {
     canvas.height = img.naturalHeight || img.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
-    const blob = await toJpegBlob(canvas);
+    const blob = await toJpegBlob(canvas, 0.95);
     if (blob) return blob;
   } catch (_) {}
 
@@ -175,24 +220,32 @@ const scaleCanvas = (canvas, scale) => {
   return scaledCanvas;
 };
 
-const exportPngUnderLimit = async (canvas) => {
+const exportJpegUnderLimit = async (canvas) => {
+  let quality = 0.92;
   let scale = 1;
-  let blob = await toBlob(canvas);
+  let workingCanvas = canvas;
+  let blob = await toJpegBlob(workingCanvas, quality);
+
   while (blob.size > MAX_SIZE && scale > 0.05) {
-    scale *= 0.9;
-    const scaledCanvas = scaleCanvas(canvas, scale);
-    blob = await toBlob(scaledCanvas);
+    if (quality > 0.6) {
+      quality -= 0.07;
+    } else {
+      scale *= 0.9;
+      workingCanvas = scaleCanvas(canvas, scale);
+    }
+    blob = await toJpegBlob(workingCanvas, quality);
   }
+
   return blob;
 };
 
-fileInput.addEventListener("change", async (event) => {
-  const [file] = event.target.files;
+const handleFile = async (file) => {
   if (!file) return;
 
   resetOutput();
   destroyCropper();
   revokeUrl(sourceUrl);
+  setDropZoneState(false);
 
   originalName = file.name.replace(/\.[^/.]+$/, "") || "image";
 
@@ -231,7 +284,33 @@ fileInput.addEventListener("change", async (event) => {
 
   sourceUrl = URL.createObjectURL(blob);
   loadImageToCropper(sourceUrl);
+};
+
+fileInput.addEventListener("change", async (event) => {
+  const [file] = event.target.files;
+  await handleFile(file);
 });
+
+if (dropZone) {
+  dropZone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+  });
+
+  dropZone.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    dropZone.classList.remove("dragover");
+    const file = event.dataTransfer?.files?.[0];
+    if (file) {
+      fileInput.value = "";
+      await handleFile(file);
+    }
+  });
+}
 
 cropBtn.addEventListener("click", async () => {
   if (!cropper) return;
@@ -240,20 +319,20 @@ cropBtn.addEventListener("click", async () => {
   const croppedCanvas = cropper.getCroppedCanvas();
   if (!croppedCanvas) return;
 
-  const blob = await exportPngUnderLimit(croppedCanvas);
+  const blob = await exportJpegUnderLimit(croppedCanvas);
   if (!blob) return;
 
   if (blob.size > MAX_SIZE) {
-    setInfo("无法压缩到 200KB 以下，请缩小裁切区域后重试。");
+    setInfo("无法压缩到 300KB 以下，请缩小裁切区域后重试。");
     return;
   }
 
   outputUrl = URL.createObjectURL(blob);
   outputImage.src = outputUrl;
   downloadBtn.href = outputUrl;
-  downloadBtn.download = `${originalName}_cropped.png`;
+  downloadBtn.download = `${originalName}_cropped.jpg`;
   downloadBtn.classList.remove("disabled");
-  setInfo(`导出大小：${formatSize(blob.size)}（PNG）`);
+  setInfo(`导出大小：${formatSize(blob.size)}（JPG）`);
 });
 
 resetBtn.addEventListener("click", () => {
@@ -263,6 +342,7 @@ resetBtn.addEventListener("click", () => {
   destroyCropper();
   revokeUrl(sourceUrl);
   sourceImage.removeAttribute("src");
+  setDropZoneState(false);
 });
 
 window.addEventListener("beforeunload", () => {
