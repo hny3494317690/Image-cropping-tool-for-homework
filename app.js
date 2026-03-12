@@ -23,8 +23,7 @@ const getPreferredTheme = () => {
 const applyTheme = (theme) => {
   document.body.classList.toggle("dark", theme === "dark");
   if (themeToggle) {
-    themeToggle.textContent = theme === "dark" ? "浅色模式" : "深色模式";
-    themeToggle.setAttribute("aria-pressed", theme === "dark");
+    themeToggle.checked = theme === "dark";
   }
 };
 
@@ -36,9 +35,8 @@ const initTheme = () => {
 initTheme();
 
 if (themeToggle) {
-  themeToggle.addEventListener("click", () => {
-    const isDark = document.body.classList.contains("dark");
-    const next = isDark ? "light" : "dark";
+  themeToggle.addEventListener("change", () => {
+    const next = themeToggle.checked ? "dark" : "light";
     localStorage.setItem(THEME_KEY, next);
     applyTheme(next);
   });

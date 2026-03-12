@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>图片裁切与压缩工具</title>
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="stylesheet" href="./libs/cropper.min.css" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -14,19 +15,30 @@
           <h1>图片裁切与压缩工具</h1>
           <p>支持 JPG / PNG / HEIC 等格式上传，裁切后导出 JPG，保证文件小于 300KB。</p>
         </div>
-        <button id="themeToggle" class="button ghost" type="button" aria-pressed="false">
-          深色模式
-        </button>
+        <label class="theme-toggle" aria-label="切换深色模式">
+          <input id="themeToggle" type="checkbox" />
+          <span class="theme-track">
+            <span class="theme-icon" aria-hidden="true">☀️</span>
+            <span class="theme-icon" aria-hidden="true">🌙</span>
+            <span class="theme-thumb"></span>
+          </span>
+        </label>
       </header>
 
       <section class="panel">
-        <label class="file-input">
-          <input id="fileInput" type="file" accept="image/*,.heic,.heif" />
-          <span>选择图片</span>
-        </label>
-        <div class="meta">
-          <div id="fileInfo">未选择图片</div>
-          <div id="outputInfo">导出尺寸与大小将在此显示</div>
+        <div class="panel-row">
+          <label class="file-input">
+            <input id="fileInput" type="file" accept="image/*,.heic,.heif" />
+            <span>选择图片</span>
+          </label>
+          <div class="actions inline-actions">
+            <button id="cropBtn" class="button primary">裁切并压缩</button>
+            <button id="resetBtn" class="button">重置</button>
+          </div>
+          <div class="meta">
+            <div id="fileInfo">未选择图片</div>
+            <div id="outputInfo">导出尺寸与大小将在此显示</div>
+          </div>
         </div>
       </section>
 
@@ -40,17 +52,14 @@
 
         <div class="preview-area">
           <div class="area-title">导出预览</div>
+          <a id="downloadBtn" class="button disabled" download>下载 JPG</a>
           <div class="image-wrap output">
             <img id="outputImage" alt="" />
           </div>
-          <a id="downloadBtn" class="button disabled" download>下载 JPG</a>
         </div>
       </section>
 
-      <section class="actions">
-        <button id="cropBtn" class="button primary">裁切并压缩</button>
-        <button id="resetBtn" class="button">重置</button>
-      </section>
+      
     </main>
 
     <script src="./libs/heic2any.min.js"></script>
