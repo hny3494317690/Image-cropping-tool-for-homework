@@ -127,6 +127,7 @@ const setCropButtonsDisabled = (disabled) => {
 const setFloatingActionsVisible = (visible) => {
   if (!floatingActions) return;
 
+  floatingActions.hidden = !visible;
   floatingActions.classList.toggle("visible", visible);
   floatingActions.setAttribute("aria-hidden", visible ? "false" : "true");
 
