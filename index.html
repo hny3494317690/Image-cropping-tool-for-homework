@@ -62,6 +62,26 @@
           <div class="area-title">裁切预览</div>
           <div class="image-wrap drop-zone" id="dropZone">
             <img id="sourceImage" alt="" />
+            <div
+              id="floatingActions"
+              class="floating-actions"
+              role="group"
+              aria-label="裁剪操作"
+              aria-hidden="true"
+            >
+              <button id="floatingCropBtn" class="button primary" type="button">
+                裁切
+              </button>
+              <a
+                id="floatingDownloadBtn"
+                class="button disabled"
+                download
+                aria-disabled="true"
+                tabindex="-1"
+              >
+                下载
+              </a>
+            </div>
           </div>
         </div>
 

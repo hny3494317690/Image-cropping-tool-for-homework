@@ -20,6 +20,9 @@
   --success-text: #ffffff;
   --danger-bg: #ef4444;
   --danger-text: #ffffff;
+  --floating-bg: rgba(255, 255, 255, 0.92);
+  --floating-border: rgba(148, 163, 184, 0.35);
+  --floating-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
 }
 
 body.dark {
@@ -43,6 +46,9 @@ body.dark {
   --success-text: #ffffff;
   --danger-bg: #ef4444;
   --danger-text: #ffffff;
+  --floating-bg: rgba(15, 23, 42, 0.9);
+  --floating-border: rgba(148, 163, 184, 0.28);
+  --floating-shadow: 0 16px 36px rgba(2, 6, 23, 0.48);
 }
 
 * {
@@ -210,6 +216,40 @@ body {
   background: var(--output-bg);
 }
 
+.floating-actions {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--floating-border);
+  background: var(--floating-bg);
+  box-shadow: var(--floating-shadow);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(12px, 12px);
+  transition: transform 0.12s ease, opacity 0.18s ease, visibility 0.18s ease;
+  z-index: 10;
+}
+
+.floating-actions.visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.floating-actions .button {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .actions {
   display: flex;
   gap: 12px;
@@ -260,6 +300,10 @@ body.is-mobile .workspace {
 
 body.is-mobile .preview-area .button {
   width: 100%;
+}
+
+body.is-mobile .floating-actions .button {
+  width: auto;
 }
 
 .button {
@@ -351,6 +395,12 @@ body.is-mobile .preview-area .button {
   opacity: 0.5;
 }
 
+.button:disabled {
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 @media (max-width: 720px) {
   .panel {
     align-items: flex-start;
@@ -362,5 +412,15 @@ body.is-mobile .preview-area .button {
 
   .inline-actions {
     width: 100%;
+  }
+
+  .floating-actions {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .floating-actions .button {
+    padding: 8px 12px;
+    font-size: 12px;
   }
 }

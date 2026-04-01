@@ -7,11 +7,17 @@ const resetBtn = document.getElementById("resetBtn");
 const fileInfo = document.getElementById("fileInfo");
 const outputInfo = document.getElementById("outputInfo");
 const dropZone = document.getElementById("dropZone");
+const floatingActions = document.getElementById("floatingActions");
+const floatingCropBtn = document.getElementById("floatingCropBtn");
+const floatingDownloadBtn = document.getElementById("floatingDownloadBtn");
 
 const MAX_SIZE = 300 * 1024;
+const FLOATING_OFFSET = 12;
 
 const themeToggle = document.getElementById("themeToggle");
 const THEME_KEY = "theme";
+const cropButtons = [cropBtn, floatingCropBtn].filter(Boolean);
+const downloadLinks = [downloadBtn, floatingDownloadBtn].filter(Boolean);
 
 const isMobileBrowser = () => {
   const ua = navigator.userAgent || "";
@@ -70,12 +76,16 @@ let cropper = null;
 let sourceUrl = null;
 let outputUrl = null;
 let originalName = "image";
+let floatingActionsFrame = null;
+let isExporting = false;
 
 const revokeUrl = (url) => {
   if (url) {
     URL.revokeObjectURL(url);
   }
 };
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const setInfo = (text) => {
   outputInfo.textContent = text;
@@ -86,16 +96,127 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024).toFixed(1)} KB`;
 };
 
-const resetOutput = () => {
+const setDownloadState = (url, filename) => {
+  downloadLinks.forEach((link) => {
+    if (!link) return;
+
+    if (url) {
+      link.href = url;
+      link.download = filename;
+      link.classList.remove("disabled");
+      link.setAttribute("aria-disabled", "false");
+      link.tabIndex = 0;
+      return;
+    }
+
+    link.classList.add("disabled");
+    link.removeAttribute("href");
+    link.removeAttribute("download");
+    link.setAttribute("aria-disabled", "true");
+    link.tabIndex = -1;
+  });
+};
+
+const setCropButtonsDisabled = (disabled) => {
+  cropButtons.forEach((button) => {
+    if (!button) return;
+    button.disabled = disabled;
+  });
+};
+
+const setFloatingActionsVisible = (visible) => {
+  if (!floatingActions) return;
+
+  floatingActions.classList.toggle("visible", visible);
+  floatingActions.setAttribute("aria-hidden", visible ? "false" : "true");
+
+  if (!visible) {
+    floatingActions.style.transform = `translate(${FLOATING_OFFSET}px, ${FLOATING_OFFSET}px)`;
+  }
+};
+
+const cancelFloatingActionsUpdate = () => {
+  if (!floatingActionsFrame) return;
+  cancelAnimationFrame(floatingActionsFrame);
+  floatingActionsFrame = null;
+};
+
+const updateFloatingActionsPosition = () => {
+  floatingActionsFrame = null;
+
+  if (!floatingActions || !dropZone || !cropper?.ready) {
+    setFloatingActionsVisible(false);
+    return;
+  }
+
+  const container = cropper.cropper || dropZone.querySelector(".cropper-container");
+  const cropBoxData = cropper.getCropBoxData?.();
+
+  if (
+    !container ||
+    !cropBoxData ||
+    !Number.isFinite(cropBoxData.width) ||
+    !Number.isFinite(cropBoxData.height) ||
+    cropBoxData.width <= 0 ||
+    cropBoxData.height <= 0
+  ) {
+    setFloatingActionsVisible(false);
+    return;
+  }
+
+  const dropRect = dropZone.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+
+  if (!dropRect.width || !dropRect.height || !containerRect.width || !containerRect.height) {
+    setFloatingActionsVisible(false);
+    return;
+  }
+
+  setFloatingActionsVisible(true);
+
+  const controlsWidth = floatingActions.offsetWidth;
+  const controlsHeight = floatingActions.offsetHeight;
+  const containerLeft = containerRect.left - dropRect.left;
+  const containerTop = containerRect.top - dropRect.top;
+  const anchorX = containerLeft + cropBoxData.left + cropBoxData.width;
+  const anchorY = containerTop + cropBoxData.top + cropBoxData.height;
+  const maxLeft = dropZone.clientWidth - controlsWidth - FLOATING_OFFSET;
+  const maxTop = dropZone.clientHeight - controlsHeight - FLOATING_OFFSET;
+  let left = anchorX + FLOATING_OFFSET;
+  let top = anchorY + FLOATING_OFFSET;
+
+  if (left > maxLeft) {
+    left = anchorX - controlsWidth - FLOATING_OFFSET;
+  }
+  if (top > maxTop) {
+    top = anchorY - controlsHeight - FLOATING_OFFSET;
+  }
+
+  left = clamp(left, FLOATING_OFFSET, Math.max(FLOATING_OFFSET, maxLeft));
+  top = clamp(top, FLOATING_OFFSET, Math.max(FLOATING_OFFSET, maxTop));
+
+  floatingActions.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+};
+
+const scheduleFloatingActionsUpdate = () => {
+  if (!floatingActions || floatingActionsFrame) return;
+
+  floatingActionsFrame = requestAnimationFrame(() => {
+    updateFloatingActionsPosition();
+  });
+};
+
+const resetOutput = (message = "导出尺寸与大小将在此显示") => {
   revokeUrl(outputUrl);
   outputUrl = null;
   outputImage.removeAttribute("src");
-  downloadBtn.classList.add("disabled");
-  downloadBtn.removeAttribute("href");
-  setInfo("导出尺寸与大小将在此显示");
+  setDownloadState(null);
+  setInfo(message);
 };
 
 const destroyCropper = () => {
+  cancelFloatingActionsUpdate();
+  setFloatingActionsVisible(false);
   if (cropper) {
     cropper.destroy();
     cropper = null;
@@ -114,6 +235,21 @@ const loadImageToCropper = (url) => {
       movable: true,
       zoomable: true,
       rotatable: true,
+      ready() {
+        scheduleFloatingActionsUpdate();
+      },
+      cropmove() {
+        scheduleFloatingActionsUpdate();
+      },
+      crop() {
+        if (outputUrl && !isExporting) {
+          resetOutput("裁剪区域已变化，请重新裁切。");
+        }
+        scheduleFloatingActionsUpdate();
+      },
+      zoom() {
+        scheduleFloatingActionsUpdate();
+      },
     });
   };
   sourceImage.src = url;
@@ -301,6 +437,42 @@ const exportJpegUnderLimit = async (canvas) => {
   return blob;
 };
 
+const runCropExport = async () => {
+  if (!cropper || isExporting) return;
+
+  isExporting = true;
+  setCropButtonsDisabled(true);
+  resetOutput("正在导出，请稍候...");
+
+  try {
+    const croppedCanvas = cropper.getCroppedCanvas();
+    if (!croppedCanvas) {
+      setInfo("裁切失败，请调整裁切框后重试。");
+      return;
+    }
+
+    const blob = await exportJpegUnderLimit(croppedCanvas);
+    if (!blob) {
+      setInfo("导出失败，请重试。");
+      return;
+    }
+
+    if (blob.size > MAX_SIZE) {
+      setInfo("无法压缩到 300KB 以下，请缩小裁切区域后重试。");
+      return;
+    }
+
+    outputUrl = URL.createObjectURL(blob);
+    outputImage.src = outputUrl;
+    setDownloadState(outputUrl, `${originalName}_cropped.jpg`);
+    setInfo(`导出大小：${formatSize(blob.size)}（JPG）`);
+  } finally {
+    isExporting = false;
+    setCropButtonsDisabled(false);
+    scheduleFloatingActionsUpdate();
+  }
+};
+
 const handleFile = async (file) => {
   if (!file) return;
 
@@ -365,27 +537,8 @@ if (dropZone) {
   });
 }
 
-cropBtn.addEventListener("click", async () => {
-  if (!cropper) return;
-  resetOutput();
-
-  const croppedCanvas = cropper.getCroppedCanvas();
-  if (!croppedCanvas) return;
-
-  const blob = await exportJpegUnderLimit(croppedCanvas);
-  if (!blob) return;
-
-  if (blob.size > MAX_SIZE) {
-    setInfo("无法压缩到 300KB 以下，请缩小裁切区域后重试。");
-    return;
-  }
-
-  outputUrl = URL.createObjectURL(blob);
-  outputImage.src = outputUrl;
-  downloadBtn.href = outputUrl;
-  downloadBtn.download = `${originalName}_cropped.jpg`;
-  downloadBtn.classList.remove("disabled");
-  setInfo(`导出大小：${formatSize(blob.size)}（JPG）`);
+cropButtons.forEach((button) => {
+  button.addEventListener("click", runCropExport);
 });
 
 resetBtn.addEventListener("click", () => {
@@ -398,7 +551,11 @@ resetBtn.addEventListener("click", () => {
   setDropZoneState(false);
 });
 
+window.addEventListener("resize", scheduleFloatingActionsUpdate);
+window.addEventListener("orientationchange", scheduleFloatingActionsUpdate);
+
 window.addEventListener("beforeunload", () => {
+  cancelFloatingActionsUpdate();
   revokeUrl(sourceUrl);
   revokeUrl(outputUrl);
 });
